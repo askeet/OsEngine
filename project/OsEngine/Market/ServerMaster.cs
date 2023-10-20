@@ -48,6 +48,8 @@ using OsEngine.Market.Servers.BitMaxFutures;
 using OsEngine.Market.Servers.BybitSpot;
 using OsEngine.Market.Servers.BitGet.BitGetSpot;
 using OsEngine.Market.Servers.BitGet.BitGetFutures;
+using OsEngine.Market.Servers.BingX.BingXFutures;
+using OsEngine.Market.Servers.BingX.BingXSpot;
 
 namespace OsEngine.Market
 {
@@ -107,6 +109,9 @@ namespace OsEngine.Market
                 serverTypes.Add(ServerType.Bitmax_AscendexFutures);
                 serverTypes.Add(ServerType.BitGetSpot);
                 serverTypes.Add(ServerType.BitGetFutures);
+                serverTypes.Add(ServerType.BingXSpot);
+                serverTypes.Add(ServerType.BingXFutures);
+
 
                 serverTypes.Add(ServerType.InteractiveBrokers);
                 serverTypes.Add(ServerType.NinjaTrader);
@@ -184,29 +189,31 @@ namespace OsEngine.Market
         {
             get
             {
-                List<ServerType> serverTypes = new List<ServerType>();
-
-                serverTypes.Add(ServerType.Finam);
-                serverTypes.Add(ServerType.MoexDataServer);
-                serverTypes.Add(ServerType.MfdWeb);
-
-                serverTypes.Add(ServerType.AscendEx_BitMax);
-                serverTypes.Add(ServerType.Binance);
-                serverTypes.Add(ServerType.BinanceFutures);
-                serverTypes.Add(ServerType.GateIoFutures);
-                serverTypes.Add(ServerType.BitMex);
-                serverTypes.Add(ServerType.BitStamp);
-                serverTypes.Add(ServerType.Bitfinex);
-                serverTypes.Add(ServerType.Kraken);
-                serverTypes.Add(ServerType.Exmo);
-                serverTypes.Add(ServerType.BybitSpot);
-                serverTypes.Add(ServerType.HuobiSpot);
-                serverTypes.Add(ServerType.HuobiFutures);
-                serverTypes.Add(ServerType.HuobiFuturesSwap);
-                serverTypes.Add(ServerType.Bybit);
-                serverTypes.Add(ServerType.OKX);
-                serverTypes.Add(ServerType.BitGetSpot);
-                serverTypes.Add(ServerType.BitGetFutures);
+                List<ServerType> serverTypes = new List<ServerType>
+                {
+                    ServerType.Finam,
+                    ServerType.MoexDataServer,
+                    ServerType.MfdWeb,
+                    ServerType.AscendEx_BitMax,
+                    ServerType.Binance,
+                    ServerType.BinanceFutures,
+                    ServerType.GateIoFutures,
+                    ServerType.BitMex,
+                    ServerType.BitStamp,
+                    ServerType.Bitfinex,
+                    ServerType.Kraken,
+                    ServerType.Exmo,
+                    ServerType.BybitSpot,
+                    ServerType.HuobiSpot,
+                    ServerType.HuobiFutures,
+                    ServerType.HuobiFuturesSwap,
+                    ServerType.Bybit,
+                    ServerType.OKX,
+                    ServerType.BitGetSpot,
+                    ServerType.BitGetFutures,
+                    ServerType.BingXSpot,
+                    ServerType.BingXFutures
+                };
 
                 return serverTypes;
             }
@@ -310,6 +317,14 @@ namespace OsEngine.Market
                 if (type == ServerType.BitGetSpot)
                 {
                     newServer = new BitGetServerSpot();
+                }
+                if (type == ServerType.BingXFutures)
+                {
+                    newServer = new BingXServerFutures();
+                }
+                if (type == ServerType.BingXSpot)
+                {
+                    newServer = new BingXServerSpot();
                 }
                 if (type == ServerType.Bitmax_AscendexFutures)
                 {
@@ -439,6 +454,7 @@ namespace OsEngine.Market
                 {
                     newServer = new FinamServer();
                 }
+
 
                 if (newServer == null)
                 {
@@ -700,6 +716,19 @@ namespace OsEngine.Market
                 if (serverPermission == null)
                 {
                     serverPermission = new BitGetFuturesServerPermission();
+                    _serversPermissions.Add(serverPermission);
+                }
+
+                return serverPermission;
+            }
+
+            if (type == ServerType.BingXFutures)
+            {
+                serverPermission = _serversPermissions.Find(s => s.ServerType == type);
+
+                if (serverPermission == null)
+                {
+                    serverPermission = new BingXFuturesServerPermission();
                     _serversPermissions.Add(serverPermission);
                 }
 
@@ -1458,6 +1487,16 @@ namespace OsEngine.Market
         /// <summary>
         /// BitGetFutures exchange
         /// </summary>
-        BitGetFutures
+        BitGetFutures,
+
+        /// <summary>
+        /// BingXSpot exchange
+        /// </summary>
+        BingXSpot,
+
+        /// <summary>
+        /// BingXFutures exchange
+        /// </summary>
+        BingXFutures
     }
 }

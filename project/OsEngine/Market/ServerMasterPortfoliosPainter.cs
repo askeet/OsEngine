@@ -501,6 +501,16 @@ namespace OsEngine.Market
                 }
             }
 
+            if (myServer.ServerType == ServerType.BingXFutures)
+            {
+                if (positionOnBoard.SecurityNameCode.EndsWith("_long")
+                    || positionOnBoard.SecurityNameCode.EndsWith("_short")
+                    || positionOnBoard.SecurityNameCode.EndsWith("_both"))
+                {
+                    return true;
+                }
+            }
+
             return false;
         }
 
@@ -520,6 +530,13 @@ namespace OsEngine.Market
             }
 
             if (server.ServerType == ServerType.BitGetFutures)
+            {
+                trueNameSec = trueNameSec.Replace("_long", "");
+                trueNameSec = trueNameSec.Replace("_short", "");
+                trueNameSec = trueNameSec.Replace("_both", "");
+            }
+
+            if (server.ServerType == ServerType.BingXFutures)
             {
                 trueNameSec = trueNameSec.Replace("_long", "");
                 trueNameSec = trueNameSec.Replace("_short", "");

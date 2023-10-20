@@ -699,8 +699,10 @@ namespace OsEngine.Market.Servers.Binance.Spot
                 }
                 else if (needTf == "10m")
                 {
-                    var param = new Dictionary<string, string>();
-                    param.Add("symbol=" + nameSec.ToUpper(), "&interval=5m");
+                    var param = new Dictionary<string, string>
+                    {
+                        { "symbol=" + nameSec.ToUpper(), "&interval=5m" }
+                    };
                     var res = CreateQuery(BinanceExchangeType.SpotExchange, Method.GET, endPoint, param, false);
                     var candles = _deserializeCandles(res);
                     var newCandles = BuildCandles(candles, 10, 5);

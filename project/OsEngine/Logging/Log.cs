@@ -987,7 +987,7 @@ namespace OsEngine.Logging
     /// log message type
     /// тип сообщения для лога
     /// </summary>
-    public enum LogMessageType
+    public enum LogMessageType1
     {
         /// <summary>
         /// systemic message

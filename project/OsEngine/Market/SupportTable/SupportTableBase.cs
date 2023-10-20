@@ -147,6 +147,16 @@ namespace OsEngine.Market.SupportTable
             };
             supportList.Add(bitGet);
 
+            SupportConnection bingX = new SupportConnection()
+            {
+                ServerType = ServerType.BingXSpot,
+                SupportType = SupportServerType.Prime,
+                LinqToLogo = "\\Images\\Connections\\Crypto\\Bitget.png",
+                LingSiteUrl = "https://partner.bitget.com/bg/txme90901684140842016 ",
+                Discount = 20
+            };
+            supportList.Add(bingX);
+
             SupportConnection okx = new SupportConnection()
             {
                 ServerType = ServerType.OKX,
