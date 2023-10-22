@@ -1,16 +1,19 @@
-﻿using Newtonsoft.Json;
-using OsEngine.Entity;
-using OsEngine.Language;
-using OsEngine.Logging;
-using BingX.API;
+﻿using BingX.API;
 using BingX.API.Constants;
+using BingX.API.Entity;
+using BingX.API.Entity.ListenKey;
 using BingX.API.Entity.Spot.MarketInterface;
 using BingX.API.Entity.Spot.SocketAPI.WebSocketMarketData;
 using BingX.API.Entity.Spot.SpotAccount;
 using BingX.API.Helpers;
-//using BingX.Spot.Entity;
+using BingX.API.Url;
 using BingX.Exceptions;
 using BingX.Interfaces;
+using Newtonsoft.Json;
+using OsEngine.Entity;
+using OsEngine.Language;
+using OsEngine.Logging;
+using OsEngine.Market.Servers.BingX.BingXSpot.Entity;
 using OsEngine.Market.Servers.Entity;
 using System;
 using System.Collections.Concurrent;
@@ -18,14 +21,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 using WebSocket4Net;
-using BingX.API.Url;
-using OsEngine.Market.Servers.BingX.BingXSpot.Entity;
 
 namespace OsEngine.Market.Servers.BingX.BingXSpot
 {
@@ -101,21 +100,23 @@ namespace OsEngine.Market.Servers.BingX.BingXSpot
                         LicenceKey = LicenceKeyResponse.ListenKey;
                         TimeLastLicenceKey = DateTime.Now;
                         TimeLastSendPong = DateTime.Now;
+                        TimeLastExtendLicenceKey = DateTime.Now;
                         TimeToUprdatePortfolio = DateTime.Now;
                         FIFOListWebSocketMessage = new ConcurrentQueue<string>();
-                        StartCheckAliveWebSocket();
+                        StartCheckAliveWebSocket();                   
                         StartMessageReader();
                         CreateWebSocketConnection();
                         StartUpdatePortfolio();
+                        StartExtendLicenceKey();
                         return;
                     }
                                         
-                    Logger.SendLogMsg("Connection is closed. Licence Key is not find.", LogMessageType.Error);
+                    Logger.SendLogMsg("Connection is closed. Licence Key is not find.", UrlRequest.LicenceKey.ListenKey, LogMessageType.Error);
                     
                 }
                 else
                 {
-                    Logger.SendLogMsg("Connection can not be open.", LogMessageType.Error);
+                    Logger.SendLogMsg("Connection can not be open.", UrlRequest.GetServerTime, LogMessageType.Error);
                 }
 
             }
@@ -488,6 +489,64 @@ namespace OsEngine.Market.Servers.BingX.BingXSpot
 
         #endregion
 
+        #region Extend licence key 
+        private DateTime TimeLastExtendLicenceKey { get; set; }
+
+        private void StartExtendLicenceKey()
+        {
+            Thread thread = new Thread(ExtendLicenceKey);
+            thread.IsBackground = true;
+            thread.Name = "ExtendLicenceKey";
+            thread.Start();
+        }
+
+        private void ExtendLicenceKey()
+        {
+            while (IsDispose == false)
+            {
+                Thread.Sleep(5000);
+
+                if (webSocket != null &&
+                    (webSocket.State == WebSocketState.Open ||
+                    webSocket.State == WebSocketState.Connecting)
+                    )
+                {
+                    if (TimeLastExtendLicenceKey.AddSeconds(GenericConst.TimeExtendLicenceKeySec) <= DateTime.Now)
+                    {
+                        var validityPeriod = UrlRequest.LicenceKey.ExtendListenKeyValidityPeriod;
+                        validityPeriod.Request = new ExtendListenKeyValidityPeriodRequest()
+                        {
+                            ListenKey = LicenceKey
+                        };
+                        try
+                        {
+                            var response = Request.DoRequest(UrlRequest.LicenceKey.ExtendListenKeyValidityPeriod);
+                            TimeLastExtendLicenceKey = DateTime.Now;
+                            if(response.StatusCode != HttpStatusCode.OK)
+                            {
+                                Logger.SendLogMsg("Invalid status. Licence Key can not be extended. Will try 1 minute later.", UrlRequest.LicenceKey.ExtendListenKeyValidityPeriod, LogMessageType.Error);
+                                TimeLastExtendLicenceKey = DateTime.Now.AddMinutes(-1);
+                            }
+                        }
+                        catch(Exception e)
+                        {
+                            Logger.SendLogMsg(e, "Licence Key can not be extended. Closed conection.", UrlRequest.LicenceKey.ExtendListenKeyValidityPeriod, LogMessageType.Error);
+                            TimeLastExtendLicenceKey = DateTime.Now.AddMinutes(-1);
+                            Dispose();
+                        }
+                    }
+                }
+                else
+                {
+                    Dispose();
+                }
+            }
+        }
+
+
+        #endregion
+
+
         #region 8 WebSocket check alive
 
         private DateTime TimeLastSendPong = DateTime.Now;
@@ -504,7 +563,6 @@ namespace OsEngine.Market.Servers.BingX.BingXSpot
 
         private void CheckAliveWebSocket()
         {
-            int NO_PING_IN_SEC = 50;
             while (IsDispose == false)
             {
                 Thread.Sleep(3000);
@@ -525,9 +583,9 @@ namespace OsEngine.Market.Servers.BingX.BingXSpot
                             TimeLastSendPong = DateTime.Now;
                         }
                     }
-                    else if(TimeLastSendPong.AddSeconds(NO_PING_IN_SEC) <= DateTime.Now)
+                    else if( TimeLastSendPong.AddSeconds(GenericConst.PingTimeToWaitSec) <= DateTime.Now )
                     {
-                        Logger.SendLogMsg($"No ping more than {NO_PING_IN_SEC} sec. WebSocket Closed Event", LogMessageType.Error);
+                        Logger.SendLogMsg($"No ping more than {GenericConst.PingTimeToWaitSec} sec. WebSocket Closed Event", LogMessageType.Error);
                         Dispose();
                     }
                 }
@@ -600,12 +658,11 @@ namespace OsEngine.Market.Servers.BingX.BingXSpot
                         continue;
                     }
 
-                    MarketDepthDataResponse SubscribleState = null;
+                    BaseCommandResponse baseMessage = null;
 
                     try
                     {
-                        SubscribleState = JsonConvert.DeserializeObject<MarketDepthDataResponse>(message);
-                        //SubscribleState = JsonConvert.DeserializeAnonymousType(message, new ResponseWebSocketMessageSubscrible());
+                        baseMessage = JsonConvert.DeserializeObject<BaseCommandResponse>(message);
                     }
                     catch (Exception error)
                     {
@@ -614,29 +671,34 @@ namespace OsEngine.Market.Servers.BingX.BingXSpot
                         continue;
                     }
 
-                    if (SubscribleState.Code > 0)
+                    if (baseMessage.Code > 0)
                     {
-                        Logger.SendLogMsg(SubscribleState.Code + "\n" +
-                                SubscribleState.DebugMsg, LogMessageType.Error);
+                        Logger.SendLogMsg(baseMessage.Code + "\n" +
+                                baseMessage.DataType, LogMessageType.Error);
                         Dispose();
                         continue;
                     }
                     else
                     {
-                        //ResponseWebSocketMessageAction<object> action = JsonConvert.DeserializeAnonymousType(message, new ResponseWebSocketMessageAction<object>());
+                        if (baseMessage.DataType != null)
+                        {
+                            if (baseMessage.DataType.Contains("@depth"))
+                            {
+                                var marketDepthData = JsonConvert.DeserializeObject<MarketDepthDataResponse>(message);
+                                UpdateDepth(marketDepthData);
+                                continue;
+                            }
+
+                            if (baseMessage.DataType.Contains("@trade"))
+                            {
+                                var transactionByTransaction = JsonConvert.DeserializeObject<SubscriptionTransactionByTransactionResponse>(message);
+                                UpdateTrade(transactionByTransaction);
+                                continue;
+                            }
+                        }
 
                         //if (action.arg != null)
                         //{
-                        //    if (action.arg.channel.Equals("books15"))
-                        //    {
-                        //        UpdateDepth(message);
-                        //        continue;
-                        //    }
-                        //    if (action.arg.channel.Equals("trade"))
-                        //    {
-                        //        UpdateTrade(message);
-                        //        continue;
-                        //    }
                         //    if (action.arg.channel.Equals("orders"))
                         //    {
                         //        UpdateOrder(message);
@@ -653,84 +715,51 @@ namespace OsEngine.Market.Servers.BingX.BingXSpot
             }
         }
 
-        private void UpdateTrade(string message)
+        private void UpdateTrade(SubscriptionTransactionByTransactionResponse responseTrade)
         {
-            ResponseWebSocketMessageAction<List<List<string>>> responseTrade = JsonConvert.DeserializeAnonymousType(message, new ResponseWebSocketMessageAction<List<List<string>>>());
-
-            if (responseTrade == null)
+            if (responseTrade == null || responseTrade.Data == null)
             {
                 return;
             }
 
-            if (responseTrade.data == null)
+            var trade = new Trade
             {
-                return;
-            }
-
-            if (responseTrade.data.Count == 0)
-            {
-                return;
-            }
-
-            if (responseTrade.data[0] == null)
-            {
-                return;
-            }
-
-            if (responseTrade.data[0].Count < 2)
-            {
-                return;
-            }
-
-            Trade trade = new Trade();
-            trade.SecurityNameCode = responseTrade.arg.instId;
-            trade.Price = Convert.ToDecimal(responseTrade.data[0][1].Replace(".", ","));
-            trade.Id = responseTrade.data[0][0];
-            trade.Time = TimeManager.GetDateTimeFromTimeStamp(Convert.ToInt64(responseTrade.data[0][0]));
-            trade.Volume = Convert.ToDecimal(responseTrade.data[0][2].Replace('.', ',').Replace(".", ","));
-            trade.Side = responseTrade.data[0][3].Equals("buy") ? Side.Buy : Side.Sell;
+                SecurityNameCode = responseTrade.DataType,
+                Price = responseTrade.Data.TransactionPrice,
+                Id = responseTrade.Data.TransactionID.ToString(),
+                Volume = responseTrade.Data.ExecutedQuantity,               
+                Time = TimeManager.GetDateTimeFromTimeStamp(responseTrade.Data.EventTime),
+                Side = responseTrade.Data.BuyerIsAMarketMaker ? Side.Sell : Side.Buy
+            };
 
             NewTradesEvent(trade);
         }
 
-        private void UpdateDepth(string message)
-        {
-            ResponseWebSocketMessageAction<List<ResponseWebSocketDepthItem>> responseDepth = JsonConvert.DeserializeAnonymousType(message, new ResponseWebSocketMessageAction<List<ResponseWebSocketDepthItem>>());
 
-            if (responseDepth.data == null)
+        private void UpdateDepth(MarketDepthDataResponse marketDepthData)
+        {
+            if (marketDepthData.Data == null)
             {
                 return;
             }
 
-            MarketDepth marketDepth = new MarketDepth();
-
-            List<MarketDepthLevel> ascs = new List<MarketDepthLevel>();
-            List<MarketDepthLevel> bids = new List<MarketDepthLevel>();
-
-            marketDepth.SecurityNameCode = responseDepth.arg.instId;
-
-            for (int i = 0; i < responseDepth.data[0].asks.Count; i++)
+            var marketDepth = new MarketDepth
             {
-                ascs.Add(new MarketDepthLevel()
+                SecurityNameCode = marketDepthData.DataType.Split('@').FirstOrDefault() ?? marketDepthData.DataType,
+                Asks = marketDepthData.Data.MarketAsks.Select(ask=> new MarketDepthLevel()
                 {
-                    Ask = responseDepth.data[0].asks[i][1].ToString().ToDecimal(),
-                    Price = responseDepth.data[0].asks[i][0].ToString().ToDecimal()
-                });
-            }
-
-            for (int i = 0; i < responseDepth.data[0].bids.Count; i++)
-            {
-                bids.Add(new MarketDepthLevel()
+                    Ask = ask.Volume,
+                    Price = ask.Price
+                }).Reverse().ToList(),
+                Bids = marketDepthData.Data.MarketBids.Select(bid => new MarketDepthLevel()
                 {
-                    Bid = responseDepth.data[0].bids[i][1].ToString().ToDecimal(),
-                    Price = responseDepth.data[0].bids[i][0].ToString().ToDecimal()
-                });
-            }
+                    Bid = bid.Volume,
+                    Price = bid.Price
+                }).ToList(),
 
-            marketDepth.Asks = ascs;
-            marketDepth.Bids = bids;
+            };
 
-            marketDepth.Time = TimeManager.GetDateTimeFromTimeStamp(Convert.ToInt64(responseDepth.data[0].ts));
+            marketDepth.Time = DateTime.UtcNow; //TimeManager.GetDateTimeFromTimeStamp(Convert.ToInt64(responseDepth.data[0].ts));
 
 
             MarketDepthEvent(marketDepth);
@@ -1065,9 +1094,10 @@ namespace OsEngine.Market.Servers.BingX.BingXSpot
             lock (_socketLocker)
             {
                 webSocket.Send(MarketDepthDataCommand.GetCommand(security.Name));
+                webSocket.Send(SubscriptionTransactionByTransactionCommand.GetCommand(security.Name));
                 //webSocket.Send($"{{\"op\": \"subscribe\",\"args\": [{{\"instType\": \"sp\",\"channel\": \"trade\",\"instId\": \"{security.Name}\"}}]}}");
                 //webSocket.Send($"{{\"op\": \"subscribe\",\"args\": [{{ \"instType\": \"sp\",\"channel\": \"books15\",\"instId\": \"{security.Name}\"}}]}}");
-               //webSocket.Send($"{{\"op\": \"subscribe\",\"args\": [{{\"channel\": \"orders\",\"instType\": \"spbl\",\"instId\": \"{security.Name}_SPBL\"}}]}}");
+                //webSocket.Send($"{{\"op\": \"subscribe\",\"args\": [{{\"channel\": \"orders\",\"instType\": \"spbl\",\"instId\": \"{security.Name}_SPBL\"}}]}}");
             }
         }
 
