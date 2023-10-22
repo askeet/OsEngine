@@ -287,3 +287,13 @@ __pycache__/
 # Cake - Uncomment if you are using it
 # tools/**
 # !tools/packages.config
+project/OsEngine/bin/Debug/AppCore.dll
+project/OsEngine/bin/Debug/BingX.dll
+project/OsEngine/bin/Debug/Newtonsoft.Json.xml
+project/OsEngine/bin/Debug/OsEngine.exe
+project/OsEngine/bin/Debug/OsEngine.exe.config
+project/OsEngine/bin/Debug/QUIKSharp.xml
+project/OsEngine/bin/Debug/SuperSocket.ClientEngine.dll
+project/OsEngine/bin/Debug/System.Buffers.xml
+project/OsEngine/bin/Debug/System.Runtime.CompilerServices.Unsafe.xml
+project/OsEngine/bin/Debug/WebSocket4Net.dll
