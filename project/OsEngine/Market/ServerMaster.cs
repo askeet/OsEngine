@@ -1488,6 +1488,11 @@ namespace OsEngine.Market
         /// BitGetFutures exchange
         /// </summary>
         BitGetFutures,
+        
+        /// <summary>
+        /// Alor OpenAPI & Websocket
+        /// </summary>
+        Alor,
 
         /// <summary>
         /// BingXSpot exchange
